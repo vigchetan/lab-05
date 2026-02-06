@@ -1,25 +1,36 @@
 package com.example.lab5_starter;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
 
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+
 import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity implements CityDialogFragment.CityDialogListener {
 
+    private FirebaseFirestore db;
     private Button addCityButton;
     private ListView cityListView;
-
     private ArrayList<City> cityArrayList;
     private ArrayAdapter<City> cityArrayAdapter;
+    private CollectionReference citiesRef;
+    private static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,18 +43,16 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
             return insets;
         });
 
-        // Set views
+        db = FirebaseFirestore.getInstance();
+        citiesRef = db.collection("cities");
+
         addCityButton = findViewById(R.id.buttonAddCity);
         cityListView = findViewById(R.id.listviewCities);
 
-        // create city array
         cityArrayList = new ArrayList<>();
         cityArrayAdapter = new CityArrayAdapter(this, cityArrayList);
         cityListView.setAdapter(cityArrayAdapter);
 
-        addDummyData();
-
-        // set listeners
         addCityButton.setOnClickListener(view -> {
             CityDialogFragment cityDialogFragment = new CityDialogFragment();
             cityDialogFragment.show(getSupportFragmentManager(),"Add City");
@@ -55,6 +64,21 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
             cityDialogFragment.show(getSupportFragmentManager(),"City Details");
         });
 
+        citiesRef.addSnapshotListener((value, error) -> {
+            if (error != null) {
+                Log.e("Firestore", error.toString());
+                return;
+            }
+            if (value != null) {
+                cityArrayList.clear();
+                for (QueryDocumentSnapshot doc : value) {
+                    String cityName = doc.getString("name");
+                    String provinceName = doc.getString("province");
+                    cityArrayList.add(new City(cityName, provinceName));
+                }
+                cityArrayAdapter.notifyDataSetChanged();
+            }
+        });
     }
 
     @Override
@@ -67,17 +91,16 @@ public class MainActivity extends AppCompatActivity implements CityDialogFragmen
     }
 
     @Override
-    public void addCity(City city){
-        cityArrayList.add(city);
-        cityArrayAdapter.notifyDataSetChanged();
-
+    public void addCity(City city) {
+        citiesRef.document(city.getName()).set(city)
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "DocumentSnapshot successfully written!"))
+                .addOnFailureListener(e -> Log.w(TAG, "Error writing document", e));
     }
 
-    public void addDummyData(){
-        City m1 = new City("Edmonton", "AB");
-        City m2 = new City("Vancouver", "BC");
-        cityArrayList.add(m1);
-        cityArrayList.add(m2);
-        cityArrayAdapter.notifyDataSetChanged();
+    @Override
+    public void deleteCity(City city) {
+        citiesRef.document(city.getName()).delete()
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "DocumentSnapshot successfully deleted!"))
+                .addOnFailureListener(e -> Log.w(TAG, "Error deleting document", e));
     }
 }
